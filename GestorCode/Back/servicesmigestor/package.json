@@ -1,0 +1,27 @@
+{
+  "name": "servicesmigestor",
+  "version": "1.0.0",
+  "description": "",
+  "main": "migestorapi.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.19.0",
+    "express": "^4.17.1",
+    "file-base64": "^1.0.0",
+    "fs": "0.0.1-security",
+    "fs-extra": "^8.1.0",
+    "helmet": "^3.21.1",
+    "http": "0.0.0",
+    "https": "^1.0.0",
+    "md5": "^2.2.1",
+    "multiparty": "^4.2.1",
+    "mysql": "^2.17.1",
+    "nodemailer": "^6.3.0",
+    "randomstring": "^1.1.5",
+    "soap": "^0.29.0"
+  }
+}

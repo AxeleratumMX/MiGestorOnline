@@ -1,0 +1,92 @@
+<div class="app-body">
+  <div class="wrapper fadeInDown">
+    <div id="formContent">
+      <!-- Tabs Titles -->
+
+      <!-- Icon -->
+      <div class="fadeIn first">
+        <img src="assets/img/migestor/logo.PNG" alt="image" />
+      </div>
+      <br />
+
+      <!-- Login Form -->
+      <form>
+        <button class="buttontransparent fadeIn second " mat-button>
+          <p class=" underlineHover"><b>INICIAR SESIÓN</b></p></button
+        >&nbsp;&nbsp;&nbsp;<button
+          class="buttontransparent fadeIn second"
+          mat-button
+        >
+          <p class=" underlineHover textcolorcrear"><b>CREAR CUENTA</b></p>
+        </button>
+
+        <br />
+        <div>
+          <mat-card *ngIf="show" class="cardback"
+            ><p class="fontcardback">Contraseña incorrecta. <br/>Reintentalo o restablece tu contraseña.</p></mat-card
+          >
+        </div>
+        <br />
+        <label class="leftaliiingUSUARiO"><b>USUARIO</b></label><br>
+        <mat-form-field class="fadeIn third" appearance="standard">
+        
+          <input matInput placeholder="Correo electrónico" />
+          <mat-icon matPrefix>person</mat-icon>
+          <mat-icon matSuffix></mat-icon>
+        </mat-form-field>
+
+        <br />
+        <br />
+        <label class="leftaliiingPASSWORD"><b>CONTRASEÑA</b></label><br>
+        <mat-form-field class="fadeIn third" appearance="standard">
+          
+          <mat-icon matPrefix>lock</mat-icon>
+          <mat-pass-toggle-visibility
+            #toggle
+            matSuffix
+          ></mat-pass-toggle-visibility>
+          <!-- THERE ABOVE ;-->
+          <input
+            matInput
+            #password
+            [type]="toggle.type"
+            required
+            placeholder="Password"
+          />
+        </mat-form-field>
+        <br>
+        <mat-hint  *ngIf="show" class="hinterror">Error en la contraseña</mat-hint>
+
+        <br />
+        <br />
+
+        <mat-checkbox class="registro"> <div class="registrocheck"> RECUÉRDAME  </div></mat-checkbox>  &ensp; &ensp; &ensp; <a  class="registro" href="#">¿OLVIDASTE TU CONTRASEÑA?</a>
+
+        <input
+          type="submit"
+          class="fadeIn fourth iniciarbuttoncolor"
+          value="INICIAR SESIÓN"
+        />
+      </form>
+
+      <!-- Remind Passowrd -->
+      <div id="formFooter" class="registro">
+        <b>
+          ¿NO TIENES UNA CUENTA?
+          <a class="underlineHover registroblack" href="#"><b>REGISTRATE</b></a>
+        </b>
+      </div>
+    </div>
+  </div>
+</div>
+<app-footer>
+  <div>
+    <a href="https://coreui.io">CoreUI</a>
+    <span>&copy; 2018 creativeLabs.</span>
+  </div>
+  <div class="ml-auto">
+    <span>Powered by</span>
+    <a href="https://coreui.io">CoreUI</a>
+  </div>
+</app-footer>
+  

@@ -1,0 +1,405 @@
+import { Injectable } from "@angular/core";
+import {
+  HttpClient,
+  HttpHeaders,
+  HttpErrorResponse
+} from "@angular/common/http";
+import { NgxXml2jsonService } from "ngx-xml2json";
+import { ApiService } from "../services/api.service";
+import { DomSanitizer } from "@angular/platform-browser";
+
+@Injectable({
+  providedIn: "root"
+})
+export class FirmaService {
+  //[ PROPIEDADES ]
+
+  private readonly DATATYPE: string = "aplication/pdf";
+  private readonly FLAGS: number = 3;
+  private readonly HASHALGORITHM: string = "SHA-256";
+  private readonly SIGNERSNUM: number = 3;
+  private readonly PDFPASSWORD: string = "";
+  //
+  private readonly SEQUENCE: string = "";
+  private readonly EVIDENCETYPE: string = "";
+  private readonly BASE64: boolean = false;
+  private readonly SIGNATUREREASON: string = "";
+  //
+  private readonly SERIALNUMBERREQUEST: string = "111111111111111111111";
+  private readonly PROCESSACTIONREQUEST: number = 0;
+  private readonly ENDPOINTSOAP: string = "http://200.66.66.214:9090/WS_SeguriSign/SeguriSign";
+  private readonly METADATA: string = `data:application/pdf;base64,`;
+
+  // Archivo PDF
+  private fileName: string;
+  private filePDF64: string;
+  // Archivo .CER en base 64
+  private certificate64: string;
+  private hashSing: string = "...";
+  // ID del proceso SeguriData
+  public processID: number;
+
+  //[ CONSTRUCTOR ]
+
+  constructor(
+    private httpCliente: HttpClient,
+    private ngxXml2jsonService: NgxXml2jsonService,
+    private api: ApiService,
+    private domSanitizer: DomSanitizer
+  ) {}
+
+  //[ METODOS ]
+
+  /// NewSignHash : Obtiene el id proceso y el Hash
+  public newSignHash(idProcess: number, file64: File, fileCer: File) {
+    this.processID = idProcess;
+    if (idProcess <= 0) {
+      return new Promise((resolve, reject) => {
+        this.nuevoProceso(file64, fileCer).then(data => {
+          resolve(data);
+        });
+      });
+    } else {
+      return new Promise((resolve, reject) => {
+        this.nuevoFirmante(idProcess, file64, fileCer).then(data => {
+          resolve(data);
+        });
+      });
+    }
+  }
+  /// showFileSigned :  Firma y Obtiene el Documento
+  public showFileSigned(singPSK: string) {
+    return new Promise((resolve, reject) => {
+      this.UpdateProcess(this.processID, singPSK).then(signerID => {
+        this.FinalProcess(this.processID).then(PDF => {
+          resolve(PDF);
+        });
+      });
+    });
+  }
+  /// showFileSigned :  Firma y Obtiene el Documento
+  public showFile(idProcess: number) {
+    return new Promise((resolve, reject) => {
+      this.FinalProcess(idProcess).then(PDF => {
+        resolve(PDF);
+      });
+    });
+  }
+  /// nuevoProceso : Flujo
+  private nuevoProceso(file64: File, fileCer: File) {
+    return new Promise((resolve, reject) => {
+      this.etlProcess(file64, fileCer).then(status => {
+        this.InitProcess().then((id: any) => {
+          this.GetHashProcess(id).then((data: any) => {
+            resolve(data);
+          });
+        });
+      });
+    });
+  }
+  /// nuevoFirmante : Flujo
+  private nuevoFirmante(id: number, file64: File, fileCer: File) {
+    return new Promise((resolve, reject) => {
+      this.etlProcess(file64, fileCer).then(status => {
+        this.GetHashProcess(id).then(data => {
+          resolve(data);
+        });
+      });
+    });
+  }
+  /// InitProces : Inicializa proceso de firma con SeguriData, retorna un ID
+  private InitProcess() {
+    return new Promise((resolve, reject) => {
+      this.InvokeService(this.GetInitRequest()).subscribe(data => {
+        const i: any = this.xmlToJson(data);
+        this.processID =
+          i["S:Envelope"]["S:Body"][
+            "ns2:multiSignedMessage_InitResponse"
+          ].multiSignedMessage_InitResponse.processID;
+        resolve(
+          i["S:Envelope"]["S:Body"]["ns2:multiSignedMessage_InitResponse"]
+            .multiSignedMessage_InitResponse.processID
+        );
+      });
+    });
+  }
+  ///  GetHash : Envia el certificado y obtiene el Hash a firmar
+  private GetHashProcess(i: number) {
+    return new Promise((resolve, reject) => {
+      this.InvokeService(this.GetHashRequest(i)).subscribe(data => {
+        const i: any = this.xmlToJson(data);
+        this.hashSing = this.HexaToBinToB64(
+          i["S:Envelope"]["S:Body"]["ns2:multiSignedMessage_GetHashResponse"]
+            .return
+        );
+        resolve(this.hashSing);
+      });
+    });
+  }
+  ///  GetHash : Envia el certificado y obtiene el Hash a firmar
+  private UpdateProcess(i: number, singPKCS: string) {
+    return new Promise((resolve, reject) => {
+      this.InvokeService(this.UpdateRequest(i, singPKCS)).subscribe(data => {
+        let i: any = this.xmlToJson(data);
+        i =
+          i["S:Envelope"]["S:Body"]["ns2:multiSignedMessage_UpdateResponse"]
+            .multiSignedMessage_UpdateResponse;
+        resolve(i);
+      });
+    });
+  }
+  ///  GetHash : Envia el certificado y obtiene el Hash a firmar
+  private FinalProcess(i: number) {
+    return new Promise((resolve, reject) => {
+      this.InvokeService(this.FinalRequest(i)).subscribe(data => {
+        let i = this.xmlToJson(data);
+        i =
+          i["S:Envelope"]["S:Body"]["ns2:multiSignedMessage_FinalResponse"]
+            .multiSignedMessage_FinalResponse["0"].data;
+        resolve(i);
+      });
+    });
+  }
+  // InvokeService : Metodo que centraliza las llamadas al servicio.
+  private InvokeService(body: string) {
+    return this.httpCliente.post(this.ENDPOINTSOAP, body, {
+      responseType: "text",
+      headers: new HttpHeaders()
+        .set("Content-Type", "text/xml")
+        .append(
+          "Access-Control-Allow-Methods",
+          "GET,PUT,POST,DELETE,PATCH,OPTIONS"
+        )
+        .append("Access-Control-Allow-Origin", "*")
+        .append(
+          "Access-Control-Allow-Headers",
+          "Access-Control-Allow-Headers, Access-Control-Allow-Origin, Access-Control-Request-Method"
+        )
+    });
+  }
+  // GetInitRequest : Construye el body del Request para Inicializar el proceso de Firma
+  private GetInitRequest(): string {
+    let body: string = ` <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ser="http://service.segurisign.seguridata/">
+                            <soapenv:Header/>
+                            <soapenv:Body>
+                               <ser:multiSignedMessage_Init>
+                                  <MultiSignedMessageInRequest>
+                                     <DataType>${
+                                       this.DATATYPE
+                                     }</DataType>
+                                     <Data>${this.filePDF64}</Data>
+                                     <Flags>${
+                                       this.FLAGS
+                                     }</Flags>
+                                     <DataInfo>${
+                                       this.fileName
+                                     }</DataInfo>
+                                     <HashAlgorithm>${
+                                       this.HASHALGORITHM
+                                     }</HashAlgorithm>
+                                     <signersNum>${
+                                       this.SIGNERSNUM
+                                     }</signersNum>
+                                     <pdfPassword>${
+                                       this.PDFPASSWORD
+                                     }</pdfPassword>
+                                  </MultiSignedMessageInRequest>
+                               </ser:multiSignedMessage_Init>
+                            </soapenv:Body>
+                         </soapenv:Envelope>`;
+    return body;
+  }
+  // GetHashRequest : Construye el body del Request para Obtener el Hash a firmar
+  private GetHashRequest(i: number): string {
+    let body: string = ` <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ser="http://service.segurisign.seguridata/">
+                            <soapenv:Header/>
+                            <soapenv:Body>
+                               <ser:multiSignedMessage_GetHash>
+                                  <id>${i}</id>
+                                  <signerCertificate>
+                                     <data>${
+                                       this.certificate64
+                                     }</data>
+                                     <sequence>${
+                                       this.SEQUENCE
+                                     }</sequence>
+                                     <evidenceType>${
+                                       this.EVIDENCETYPE
+                                     }</evidenceType>
+                                     <base64>${this.BASE64}</base64>
+                                  </signerCertificate>
+                                  <signatureReason>${
+                                    this.SIGNATUREREASON
+                                  }</signatureReason>
+                               </ser:multiSignedMessage_GetHash>
+                            </soapenv:Body>
+                         </soapenv:Envelope>`;
+    return body;
+  }
+  // UpdateRequest : Construye el body del Request para Firmar el documento
+  private UpdateRequest(i: number, singPKCS: string): string {
+    let body: string = `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ser="http://service.segurisign.seguridata/">
+                            <soapenv:Header/>
+                            <soapenv:Body>
+                               <ser:multiSignedMessage_Update>
+                                  <signedMessageRequest>
+                                     <data>${singPKCS}</data>
+                                     <fileName>${this.fileName}</fileName>
+                                     <base64>${this.BASE64}</base64>
+                                  </signedMessageRequest>
+                                  <ProcessIDRequest>${i}</ProcessIDRequest>
+                                  <SerialNumberRequest>${
+                                    this.SERIALNUMBERREQUEST
+                                  }</SerialNumberRequest>
+                               </ser:multiSignedMessage_Update>
+                            </soapenv:Body>
+                         </soapenv:Envelope>`;
+    return body;
+  }
+  // GetFinalRequest : Contruye el body del Request para Obtiene el Documento Firmado
+  private FinalRequest(i: number): string {
+    let body: string = `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ser="http://service.segurisign.seguridata/">
+                          <soapenv:Header/>
+                          <soapenv:Body>
+                             <ser:multiSignedMessage_Final>
+                                <ProcessIDRequest>${i}</ProcessIDRequest>
+                                <ProcessActionRequest>${
+                                  this.PROCESSACTIONREQUEST
+                                }</ProcessActionRequest>
+                             </ser:multiSignedMessage_Final>
+                          </soapenv:Body>
+                       </soapenv:Envelope>`;
+    return body;
+  }
+  // etlFiles : Transforma los Archivos
+  private etlProcess(filePDF: File, fileCer: File) {
+    return new Promise((resolve, reject) => {
+      this.fileToURI(filePDF).then(dataPDF => {
+        this.fileName = filePDF.name;
+        this.urlTOBase64(dataPDF.toString()).then(data64 => {
+          this.filePDF64 = data64.toString();
+          this.fileToURI(fileCer).then(data => {
+            this.urlTOBase64(data.toString()).then((data: string) => {
+              this.certificate64 = data.toString();
+              resolve(data.substring(0, 2));
+            });
+          });
+        });
+      });
+    });
+  }
+  // HexaToBinToB64 : Convierte una cadena Haxadecimal en Binario para transformarla finalmente en Base64 ... Logica de SeguriData :/
+  private HexaToBinToB64(stringhexa: string) {
+    let bytes = [];
+    for (let i = 0; i < stringhexa.length - 1; i += 2)
+      bytes.push(parseInt(stringhexa.substr(i, 2), 16));
+    let bin = String.fromCharCode.apply(String, bytes);
+    let HexaBINb64Sting = window.btoa(bin);
+    return HexaBINb64Sting;
+  }
+  // xmlToJson : Parsea un XML a un Objeto
+  private xmlToJson(xml: string): any {
+    const parser = new DOMParser();
+    return this.ngxXml2jsonService.xmlToJson(
+      parser.parseFromString(xml, "text/xml")
+    );
+  }
+  // Base64orURIToBinary : convierte base64 o URI en UIntArray
+  public Base64ToBlob(data64: string) {
+    return new Promise((resolve, reject) => {
+      let raw = window.atob(data64);
+      let array = new Uint8Array(new ArrayBuffer(raw.length));
+      for (let i = 0; i < raw.length; i++) {
+        array[i] = raw.charCodeAt(i);
+      }
+      resolve(array);
+    });
+  }
+  //  FileToBase64 : substrae el Base64 de la URI
+  private urlTOBase64(dataURI: string) {
+    return new Promise((resolve, reject) => {
+      let BASE64_MARKER = ";base64,";
+      let base64Index: number =
+        dataURI.indexOf(BASE64_MARKER) > 0
+          ? dataURI.indexOf(BASE64_MARKER) + BASE64_MARKER.length
+          : 0;
+      dataURI = dataURI.substring(base64Index);
+      resolve(dataURI);
+    });
+  }
+  // fileToURI : Realiza un Reader del File convirtiendolo en DataURL
+  private fileToURI(file: File) {
+    return new Promise((resolve, reject) => {
+      let reader = new FileReader();
+      reader.onload = function() {
+        resolve(reader.result.toString());
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  // blobToFile : convierte de Un blob a File
+  public blobToFile(blob: any, name: string) {
+    return new Promise((resolve, reject) => {
+      fetch(blob).then(res => {
+        res.blob().then(i => {
+          resolve(new File([i], name, { type: "aplication/pdf" }));
+        });
+      });
+    });
+  }
+  // dataUriToblob : convierte de Un blob a File
+  public dataUriToblob(dataUri: string) {
+    return new Promise((resolve, reject) => {
+      fetch(dataUri).then(res => {
+        res.blob().then(blob => resolve(blob));
+      });
+    });
+  }
+  // Carga Doctos de Mediacion:
+  private cargaDocumentosMediacion(idTramite: number) {
+    return new Promise((resolve, reject) => {
+      let i = `https://mediadores.blob.core.windows.net/machotes/CONVENIO_Y_ANEXOS_COMPLETO.pdf`;
+      resolve(this.domSanitizer.bypassSecurityTrustResourceUrl(i));
+    });
+  }
+  // Carga Doctos de Mediacion Firmados:
+  public cargaDocumentosMediacionFirmados(idTramite: number, idUsuarioFirmante: number) {
+    return new Promise((resolve, reject) => {
+      this.api.getFile(idUsuarioFirmante, idTramite).subscribe((response: any) => {
+        if (response["status"] === "OK") {
+          resolve(this.domSanitizer.bypassSecurityTrustResourceUrl(response.response["0"].url));
+        } else {
+          alert("Error:" + response["message"]);
+        }
+      });
+    });
+  }
+    // Carga convenio:
+    public cargaConvenio(idTramite: number, idUsuarioFirmante: number) {
+      return new Promise((resolve, reject) => {
+        this.api.getConvenio(idUsuarioFirmante, idTramite).subscribe((response: any) => {
+          if (response["status"] === "OK") {
+            resolve(this.domSanitizer.bypassSecurityTrustResourceUrl(response.response[0].url));
+          } else {
+            alert("Error:" + response["message"]);
+          }
+        });
+      });
+    }
+  // Carga Convenio Firmado
+  public cargaConvenioFirmado(idTramite: number) {
+    return new Promise((resolve, reject) => {
+      this.api.getFileX(idTramite.toString(), '49').subscribe(
+        (response: any) => {
+          if (response.response.proceso == null || response.response.proceso == "" ) {
+            resolve(this.domSanitizer.bypassSecurityTrustResourceUrl(response.response.url));
+          } else {
+            this.processID = response.response.proceso;
+            this.FinalProcess(response.response.proceso).then((PDF64: any) => {
+              resolve(this.domSanitizer.bypassSecurityTrustResourceUrl(this.METADATA + PDF64.toString()));
+            });
+          }
+        });
+    });
+  }
+}

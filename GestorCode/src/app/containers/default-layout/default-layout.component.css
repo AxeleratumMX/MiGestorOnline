@@ -1,0 +1,10 @@
+.sidebar {
+
+    background-color: gray !important;
+   
+}
+
+.nav-link .sidebar {
+
+    color:black !important;
+}
